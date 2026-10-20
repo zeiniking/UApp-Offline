@@ -21,8 +21,11 @@ jobs:
           unzip UApp_Android_Project.zip -d .
           ls -la UApp_Android_Project
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
+      
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
         with:
           distribution: temurin
           java-version: '17'

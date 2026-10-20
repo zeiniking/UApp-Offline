@@ -22,23 +22,23 @@ jobs:
       - name: Check ZIP file
         run: |
           test -f UApp_Android_Project.zip
-          unzip -l UApp_Android_Project.zip | head -40
+          unzip -t UApp_Android_Project.zip
 
       - name: Extract Android project
         run: |
           mkdir -p extracted
           unzip -q UApp_Android_Project.zip -d extracted
-          find extracted -maxdepth 4 -type f | head -100
+          find extracted -maxdepth 5 -type f | head -100
 
       - name: Locate Gradle project
         run: |
-          PROJECT_DIR=$(find extracted -name settings.gradle -o -name settings.gradle.kts | head -1 | xargs -r dirname)
+          PROJECT_DIR=$(find extracted -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit | xargs -r dirname)
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: ZIP mein Gradle Android project nahi mila."
+            echo "ERROR: Android Gradle project not found in ZIP."
             exit 1
           fi
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Project found at: $PROJECT_DIR"
+          echo "Project directory: $PROJECT_DIR"
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -46,25 +46,39 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Configure Android SDK
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+          echo "/usr/local/lib/android/sdk/platform-tools" >> "$GITHUB_PATH"
+          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+
+          SDKMANAGER=$(find /usr/local/lib/android/sdk/cmdline-tools -type f -name sdkmanager -print -quit)
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager not found"
+            exit 1
+          fi
+
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+
+          "$SDKMANAGER" --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
       - name: Build debug APK
         run: |
           cd "$PROJECT_DIR"
-          if [ -f gradlew ]; then
-            chmod +x gradlew
-            ./gradlew --no-daemon assembleDebug
-          else
-            echo "ERROR: Project mein gradlew wrapper nahi mila."
+          if [ ! -f gradlew ]; then
+            echo "ERROR: gradlew wrapper missing from Android project."
             exit 1
           fi
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: UApp-APK
-          path: |
-            extracted/**/build/outputs/apk/debug/*.apk
+          path: extracted/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-        
+          
